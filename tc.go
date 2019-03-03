@@ -12,13 +12,19 @@ type Context interface {
 	context.Context
 	Start() Context
 	Stop()
-	Timings() map[string]time.Duration
+	Timings() map[string]Record
+}
+
+// Record will track metadata about the timings and count of a function
+type Record struct {
+	Duration  time.Duration `json:"duration"`
+	CallCount int           `json:"count"`
 }
 
 type tc struct {
 	context.Context
 	enabled bool
-	timings map[string]time.Duration
+	timings map[string]Record
 	stack   []frame
 	m       sync.Mutex
 }
@@ -31,7 +37,7 @@ type frame struct {
 
 // NewContext makes a new timing context
 func NewContext(ctx context.Context) Context {
-	return &tc{Context: ctx, timings: make(map[string]time.Duration), enabled: true}
+	return &tc{Context: ctx, timings: make(map[string]Record), enabled: true}
 }
 
 func getCallerFuncPC(stack int) string {
@@ -67,14 +73,13 @@ func (c *tc) Stop() {
 		// signal to the prior frame that the rest of it's calculations begin now
 		c.stack[len(c.stack)-1].t = time.Now()
 	}
-	if d, ok := c.timings[f.f]; ok {
-		c.timings[f.f] = d + time.Since(f.t) + f.d
-	} else {
-		c.timings[f.f] = time.Since(f.t) + f.d
-	}
+	r := c.timings[f.f]
+	r.CallCount++
+	r.Duration += time.Since(f.t) + f.d
+	c.timings[f.f] = r
 }
 
 // Timings returns the calculated function timings
-func (c *tc) Timings() map[string]time.Duration {
+func (c *tc) Timings() map[string]Record {
 	return c.timings
 }

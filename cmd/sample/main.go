@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	timing "github.com/StabbyCutyou/timingcontext"
+	"github.com/StabbyCutyou/timing"
 	"github.com/davecgh/go-spew/spew"
 )
 
