@@ -41,3 +41,20 @@ func TestWithoutTiming(t *testing.T) {
 		t.Fatal("timing dict should have been nil, is not")
 	}
 }
+
+func TestContextCancel(t *testing.T) {
+	ctx, cncl := context.WithCancel(context.Background())
+	tctx := WithTiming(ctx)
+	cncl()
+	<-tctx.Done() // blocks forever if it's not done lol
+}
+
+func TestContextValue(t *testing.T) {
+	ctx := context.Background()
+	vctx := context.WithValue(ctx, struct{}{}, "shanksy")
+	tctx := WithTiming(vctx)
+	v := tctx.Value(struct{}{})
+	if v != "shanksy" {
+		t.Fatal("value was not shanksy")
+	}
+}
