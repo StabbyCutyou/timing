@@ -11,6 +11,12 @@ You can pull all the timing calculations from the context once you're done with 
 
 For an example, checkout `cmd/sample/main.go`
 
+# Without Timing
+
+To make it easy to optionally enable the timing feature, you can use `WithoutTiming` to create contexts where the calls to Start and Stop are noops. This way, you can using `timing.Context` anywhere, and disable the timing behavior with configuration, and not have to change your code.
+
 # Note
 
 API potentially unstable until v1.0.0
+
+Not sure if this is even a good/correct approach? (needs to be good enough, anyways, but not perfect)
