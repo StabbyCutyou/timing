@@ -2,15 +2,18 @@ package timing
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
 type key string
 
 const keyTiming key = "$timing.tc"
+const keyLock key = "$timing.mu"
 
 func New(ctx context.Context) context.Context {
-	return context.WithValue(ctx, keyTiming, &tc{stack: make([]frame, 0), timings: make(map[string]Record)})
+	ctx = context.WithValue(ctx, keyTiming, &tc{stack: make([]frame, 0), timings: make(map[string]Record)})
+	return context.WithValue(ctx, keyLock, &sync.Mutex{})
 }
 
 func Timings(ctx context.Context) map[string]Record {
@@ -23,6 +26,13 @@ func Timings(ctx context.Context) map[string]Record {
 }
 
 func Start(ctx context.Context) context.Context {
+	m := ctx.Value(keyLock)
+	mu, ok := m.(*sync.Mutex)
+	if !ok {
+		return ctx
+	}
+	mu.Lock()
+	defer mu.Unlock()
 	t := ctx.Value(keyTiming)
 	tctx, ok := t.(*tc)
 	if !ok {
@@ -36,6 +46,13 @@ func Start(ctx context.Context) context.Context {
 }
 
 func Stop(ctx context.Context) {
+	m := ctx.Value(keyLock)
+	mu, ok := m.(*sync.Mutex)
+	if !ok {
+		return
+	}
+	mu.Lock()
+	defer mu.Unlock()
 	t := ctx.Value(keyTiming)
 	tctx, ok := t.(*tc)
 	if !ok {
