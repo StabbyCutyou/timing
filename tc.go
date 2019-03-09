@@ -56,8 +56,15 @@ func WithTiming(ctx context.Context) context.Context {
 }
 
 // Timings returns the timing collections up to this point. Note that until Stop() is
-// evaluated, the data is incomplete and unsafe to use.
+// evaluated, the data is incomplete and unsafe to use. If the context is not a Timing
+// context, it will return nil
 func Timings(ctx context.Context) map[string]Record {
+	mu, ok := ctx.Value(keyLock).(*sync.Mutex)
+	if !ok {
+		return nil
+	}
+	mu.Lock()
+	defer mu.Unlock()
 	tctx, ok := ctx.Value(keyTiming).(*tc)
 	if !ok {
 		return nil
