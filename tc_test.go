@@ -17,8 +17,17 @@ func BenchmarkPC(b *testing.B) {
 
 func BenchmarkWithTiming(b *testing.B) {
 	ctx := WithTiming(context.Background())
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		traceMyStack(ctx)
+	}
+}
+
+func BenchmarkWithTimingStart(b *testing.B) {
+	ctx := WithTiming(context.Background())
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Stop(Start(ctx))
 	}
 }
 
@@ -45,6 +54,7 @@ func TestContextValue(t *testing.T) {
 
 func BenchmarkNonTimingContext(b *testing.B) {
 	ctx := context.Background()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		traceMyStackPure(ctx)
 	}

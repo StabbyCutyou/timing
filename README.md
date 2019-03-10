@@ -5,15 +5,11 @@ This is an attempt to make a lightweight, simple to use drop-in context replacem
 
 You should be able to drop this into any place you already use contexts, and for code you control the signature of, a change from context.Context to timing.Context should be all you need.
 
-All you have to do is add `defer ctx.Start().Stop()` to the beginning of any method call you want to trace the timing of, and that's it!
+All you have to do is add `defer timing.Stop(timing.Start(ctx))` to the beginning of any method call you want to trace the timing of, and initialize any context once with timing.WithTiming(context.Context), and that's it!
 
 You can pull all the timing calculations from the context once you're done with it by calling the `Timings()` method, which will return to you a list of fully qualified function names
 
 For an example, checkout `cmd/sample/main.go`
-
-# Without Timing
-
-To make it easy to optionally enable the timing feature, you can use `WithoutTiming` to create contexts where the calls to Start and Stop are noops. This way, you can using `timing.Context` anywhere, and disable the timing behavior with configuration, and not have to change your code.
 
 # Note
 
