@@ -20,3 +20,6 @@ To make it easy to optionally enable the timing feature, you can use `WithoutTim
 API potentially unstable until v1.0.0
 
 Not sure if this is even a good/correct approach? (needs to be good enough, anyways, but not perfect)
+
+# Roadmap
+A way to merge a sub-timing-context so you can safely track sub go routines you kick off, and collect the info underneath the original timing table to help paint full pictures. 

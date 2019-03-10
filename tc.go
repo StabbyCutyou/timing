@@ -7,13 +7,10 @@ import (
 	"time"
 )
 
-// Context represents a context capable of capturing timing infos
-type Context interface {
-	context.Context
-	Start() Context
-	Stop()
-	Timings() map[string]Record
-}
+type key string
+
+const keyTiming key = "$timing.tc"
+const keyLock key = "$timing.mu"
 
 // Record will track metadata about the timings and count of a function
 type Record struct {
@@ -23,11 +20,8 @@ type Record struct {
 
 // tc stands for timing context
 type tc struct {
-	context.Context
-	m       sync.Mutex
 	timings map[string]Record
 	stack   []frame
-	enabled bool //readonly
 }
 
 // frame as a name is like, whatever, but i keep it in a stack soooooooo
@@ -36,19 +30,6 @@ type frame struct {
 	f string        // funcname
 	t time.Time     // current time to start counting duration from on next calc
 	d time.Duration // current amount of calculated duration
-}
-
-// WithTiming makes a new timing context with timing enabled
-func WithTiming(ctx context.Context) Context {
-	return &tc{Context: ctx, timings: make(map[string]Record), enabled: true}
-}
-
-// WithoutTiming makes a new timing context without timing enabled
-// You would use this to create timing contexts that are disabled, and thus
-// all Timing related calls are no-ops. Timings() will return nil. Everything else
-// behaves off of the underlying context.
-func WithoutTiming(ctx context.Context) Context {
-	return &tc{Context: ctx}
 }
 
 // adapted this approach from the following SO link, the answer from user svenwltr, Jul 24 '16 at 11:06
@@ -61,45 +42,79 @@ func getCallerFuncPC(stack int) string {
 	return "" // TODO better default value?
 }
 
-// Start will start recording a new call and cap off the time calculated for the prior call
-func (c *tc) Start() Context {
-	if !c.enabled {
-		return c
-	}
-	// moving one deeper - cap off timing on prior stack if present
-	c.m.Lock()
-	defer c.m.Unlock()
-	if len(c.stack) > 0 {
-		// record how long the prior frame was running
-		c.stack[len(c.stack)-1].d += time.Since(c.stack[len(c.stack)-1].t)
-	}
-	// Add one to the stack
-	c.stack = append(c.stack, frame{f: getCallerFuncPC(2), t: time.Now()})
-	return c
+// WithTiming initializes a context ready to track callstack timings within a single goroutine
+func WithTiming(ctx context.Context) context.Context {
+	return context.WithValue(
+		context.WithValue(
+			ctx,
+			keyTiming,
+			&tc{stack: make([]frame, 0), timings: make(map[string]Record)},
+		),
+		keyLock,
+		&sync.Mutex{},
+	)
 }
 
-// Stop will stop recording the current call and resume calculating time for the prior call
-func (c *tc) Stop() {
-	if !c.enabled {
+// Timings returns the timing collections up to this point. Note that until Stop() is
+// evaluated, the data is incomplete and unsafe to use. If the context is not a Timing
+// context, it will return nil
+func Timings(ctx context.Context) map[string]Record {
+	mu, ok := ctx.Value(keyLock).(*sync.Mutex)
+	if !ok {
+		return nil
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	tctx, ok := ctx.Value(keyTiming).(*tc)
+	if !ok {
+		return nil
+	}
+	return tctx.timings
+}
+
+// Start will begin tracking time for a callstack frame. It is meant to be called
+// by passing it into Stop()
+func Start(ctx context.Context) context.Context {
+	mu, ok := ctx.Value(keyLock).(*sync.Mutex)
+	if !ok {
+		return ctx
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	t := ctx.Value(keyTiming)
+	tctx, ok := t.(*tc)
+	if !ok {
+		return ctx
+	}
+	if len(tctx.stack) > 0 {
+		tctx.stack[len(tctx.stack)-1].d += time.Since(tctx.stack[len(tctx.stack)-1].t)
+	}
+	tctx.stack = append(tctx.stack, frame{f: getCallerFuncPC(2), t: time.Now()})
+	return context.WithValue(ctx, keyTiming, tctx)
+}
+
+// Stop finishes calculating the timing for a callstack frame. It is meant to be called
+// by passing in Start() as the context, and defered as early as possible in a function
+func Stop(ctx context.Context) {
+	mu, ok := ctx.Value(keyLock).(*sync.Mutex)
+	if !ok {
 		return
 	}
-	c.m.Lock()
-	defer c.m.Unlock()
-	// pop one from the stack
-	var f frame
-	f, c.stack = c.stack[len(c.stack)-1], c.stack[:len(c.stack)-1]
-	if len(c.stack) > 0 {
-		// signal to the prior frame that the rest of it's calculations begin now
-		c.stack[len(c.stack)-1].t = time.Now()
+	mu.Lock()
+	defer mu.Unlock()
+	t := ctx.Value(keyTiming)
+	tctx, ok := t.(*tc)
+	if !ok {
+		return
 	}
-	r := c.timings[f.f]
+	var f frame
+	f, tctx.stack = tctx.stack[len(tctx.stack)-1], tctx.stack[:len(tctx.stack)-1]
+	if len(tctx.stack) > 0 {
+		// signal to the prior frame that the rest of it's calculations begin now
+		tctx.stack[len(tctx.stack)-1].t = time.Now()
+	}
+	r := tctx.timings[f.f]
 	r.CallCount++
 	r.Duration += time.Since(f.t) + f.d
-	c.timings[f.f] = r
-}
-
-// Timings returns the calculated function timings. Ideally, you only call this once all
-// timings have finished, as all records won't be 100% complete until the final Stop is called.
-func (c *tc) Timings() map[string]Record {
-	return c.timings
+	tctx.timings[f.f] = r
 }
